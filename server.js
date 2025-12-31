@@ -6,7 +6,13 @@ const { Pool } = require('pg');
 
 const app = express();
 
-app.use(cors());
+/* CORS aberto para frontend na Vercel */
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT'],
+  allowedHeaders: ['Content-Type']
+}));
+
 app.use(express.json());
 
 const pool = new Pool({
@@ -14,9 +20,11 @@ const pool = new Pool({
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
-  port: process.env.DB_PORT
+  port: process.env.DB_PORT,
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
 });
 
+/* Health check */
 app.get('/', (req, res) => {
   res.send('Backend funcionando');
 });
@@ -83,13 +91,11 @@ app.get('/pedidos', async (req, res) => {
         'SELECT produto, quantidade FROM itens_pedido WHERE pedido_id = $1',
         [pedido.id]
       );
-
       pedido.itens = itensResult.rows;
     }
 
     res.json(pedidos);
   } catch (error) {
-    console.error('Erro ao buscar pedidos:', error);
     res.status(500).json({ erro: 'Erro ao buscar pedidos' });
   }
 });
@@ -118,7 +124,6 @@ app.get('/pedido/:id', async (req, res) => {
 
     res.json(pedido);
   } catch (error) {
-    console.error('Erro ao buscar pedido:', error);
     res.status(500).json({ erro: 'Erro ao buscar pedido' });
   }
 });
@@ -139,7 +144,6 @@ app.put('/pedido/:id/status', async (req, res) => {
 
     res.json({ mensagem: 'Status atualizado com sucesso' });
   } catch (error) {
-    console.error('Erro ao atualizar status:', error);
     res.status(500).json({ erro: 'Erro ao atualizar status' });
   }
 });
