@@ -80,6 +80,7 @@ app.post('/pedido', async (req, res) => {
 
 app.get('/pedidos', async (req, res) => {
   try {
+    
     const pedidosResult = await pool.query(
       'SELECT * FROM pedidos ORDER BY criado_em ASC'
     );
