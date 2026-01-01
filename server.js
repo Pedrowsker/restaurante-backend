@@ -6,7 +6,7 @@ const { Pool } = require('pg');
 
 const app = express();
 
-/* CORS aberto para frontend na Vercel */
+/* CORS aberto (Vercel, navegador, testes) */
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT'],
@@ -15,13 +15,16 @@ app.use(cors({
 
 app.use(express.json());
 
+/*
+  ❗❗❗ ATENÇÃO ❗❗❗
+  NO RENDER, USA-SE APENAS DATABASE_URL
+  NÃO use DB_HOST, DB_USER, DB_PASSWORD etc
+*/
 const pool = new Pool({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 /* Health check */
@@ -29,15 +32,18 @@ app.get('/', (req, res) => {
   res.send('Backend funcionando');
 });
 
+/* Teste de banco */
 app.get('/teste-banco', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW()');
     res.json(result.rows[0]);
   } catch (error) {
+    console.error(error);
     res.status(500).send('Erro no banco');
   }
 });
 
+/* Criar pedido */
 app.post('/pedido', async (req, res) => {
   const { nome_cliente, itens } = req.body;
 
@@ -72,15 +78,16 @@ app.post('/pedido', async (req, res) => {
     });
   } catch (error) {
     await client.query('ROLLBACK');
+    console.error(error);
     res.status(500).json({ erro: 'Erro interno do servidor' });
   } finally {
     client.release();
   }
 });
 
+/* Listar pedidos */
 app.get('/pedidos', async (req, res) => {
   try {
-    
     const pedidosResult = await pool.query(
       'SELECT * FROM pedidos ORDER BY criado_em ASC'
     );
@@ -97,10 +104,12 @@ app.get('/pedidos', async (req, res) => {
 
     res.json(pedidos);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ erro: 'Erro ao buscar pedidos' });
   }
 });
 
+/* Buscar pedido por ID */
 app.get('/pedido/:id', async (req, res) => {
   const { id } = req.params;
 
@@ -125,10 +134,12 @@ app.get('/pedido/:id', async (req, res) => {
 
     res.json(pedido);
   } catch (error) {
+    console.error(error);
     res.status(500).json({ erro: 'Erro ao buscar pedido' });
   }
 });
 
+/* Atualizar status */
 app.put('/pedido/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -145,6 +156,7 @@ app.put('/pedido/:id/status', async (req, res) => {
 
     res.json({ mensagem: 'Status atualizado com sucesso' });
   } catch (error) {
+    console.error(error);
     res.status(500).json({ erro: 'Erro ao atualizar status' });
   }
 });
