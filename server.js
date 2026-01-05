@@ -85,16 +85,6 @@ app.post('/pedido', async (req, res) => {
   }
 });
 
-app.delete('/pedidos', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM pedidos');
-    res.json({ mensagem: 'Todos os pedidos removidos' });
-  } catch (error) {
-    res.status(500).json({ erro: 'Erro ao limpar pedidos' });
-  }
-});
-
-
 /* Listar pedidos */
 app.get('/pedidos', async (req, res) => {
   try {
