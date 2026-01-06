@@ -6,6 +6,7 @@ const { Pool } = require('pg');
 
 const app = express();
 
+/* CORS aberto (Vercel, navegador, testes) */
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT'],
@@ -14,18 +15,32 @@ app.use(cors({
 
 app.use(express.json());
 
+/*
+  ❗❗❗ ATENÇÃO ❗❗❗
+  NO RENDER, USA-SE APENAS DATABASE_URL
+  NÃO use DB_HOST, DB_USER, DB_PASSWORD etc
+*/
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
-
-function gerarCodigo() {
-  return Math.floor(10000 + Math.random() * 90000);
-}
 
 /* Health check */
 app.get('/', (req, res) => {
   res.send('Backend funcionando');
+});
+
+/* Teste de banco */
+app.get('/teste-banco', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT NOW()');
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Erro no banco');
+  }
 });
 
 /* Criar pedido */
@@ -41,11 +56,9 @@ app.post('/pedido', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    const codigo = gerarCodigo();
-
     const pedidoResult = await client.query(
-      'INSERT INTO pedidos (nome_cliente, codigo) VALUES ($1, $2) RETURNING id, codigo',
-      [nome_cliente, codigo]
+      'INSERT INTO pedidos (nome_cliente) VALUES ($1) RETURNING id',
+      [nome_cliente]
     );
 
     const pedidoId = pedidoResult.rows[0].id;
@@ -60,10 +73,9 @@ app.post('/pedido', async (req, res) => {
     await client.query('COMMIT');
 
     res.status(201).json({
-      pedido_id: pedidoId,
-      codigo
+      mensagem: 'Pedido criado com sucesso',
+      pedido_id: pedidoId
     });
-
   } catch (error) {
     await client.query('ROLLBACK');
     console.error(error);
@@ -73,13 +85,37 @@ app.post('/pedido', async (req, res) => {
   }
 });
 
+/* Listar pedidos */
+app.get('/pedidos', async (req, res) => {
+  try {
+    const pedidosResult = await pool.query(
+      'SELECT * FROM pedidos ORDER BY criado_em ASC'
+    );
+
+    const pedidos = pedidosResult.rows;
+
+    for (let pedido of pedidos) {
+      const itensResult = await pool.query(
+        'SELECT produto, quantidade FROM itens_pedido WHERE pedido_id = $1',
+        [pedido.id]
+      );
+      pedido.itens = itensResult.rows;
+    }
+
+    res.json(pedidos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ erro: 'Erro ao buscar pedidos' });
+  }
+});
+
 /* Buscar pedido por ID */
 app.get('/pedido/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
     const pedidoResult = await pool.query(
-      'SELECT id, nome_cliente, status, codigo FROM pedidos WHERE id = $1',
+      'SELECT id, nome_cliente, status FROM pedidos WHERE id = $1',
       [id]
     );
 
@@ -91,42 +127,12 @@ app.get('/pedido/:id', async (req, res) => {
 
     const itensResult = await pool.query(
       'SELECT produto, quantidade FROM itens_pedido WHERE pedido_id = $1',
-      [pedido.id]
+      [id]
     );
 
     pedido.itens = itensResult.rows;
+
     res.json(pedido);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ erro: 'Erro ao buscar pedido' });
-  }
-});
-
-/* Buscar pedido por CÓDIGO */
-app.get('/pedido/codigo/:codigo', async (req, res) => {
-  const { codigo } = req.params;
-
-  try {
-    const pedidoResult = await pool.query(
-      'SELECT id, nome_cliente, status, codigo FROM pedidos WHERE codigo = $1',
-      [codigo]
-    );
-
-    if (pedidoResult.rows.length === 0) {
-      return res.status(404).json({ erro: 'Pedido não encontrado' });
-    }
-
-    const pedido = pedidoResult.rows[0];
-
-    const itensResult = await pool.query(
-      'SELECT produto, quantidade FROM itens_pedido WHERE pedido_id = $1',
-      [pedido.id]
-    );
-
-    pedido.itens = itensResult.rows;
-    res.json(pedido);
-
   } catch (error) {
     console.error(error);
     res.status(500).json({ erro: 'Erro ao buscar pedido' });
@@ -156,6 +162,7 @@ app.put('/pedido/:id/status', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Servidor rodando na porta ${PORT}`);
 });
